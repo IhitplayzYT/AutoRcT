@@ -17,6 +17,7 @@ fn main() {
 
     let fl = std::fs::read_to_string(conf_p).unwrap();
     let conf = parse_conf(&fl);
+
     
 
 
