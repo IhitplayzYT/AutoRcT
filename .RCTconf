@@ -1,0 +1,37 @@
+FILE := "main.rs"
+ARGS := 152 hello
+ign_file := .env
+rs_ext := ".rs" 
+
+
+FUNC my_fn(a){
+    RET := CMD [[ -e @a]]
+    IF RET < 0
+        CMD echo "Echo of param failed"
+    ELSE
+        CMD cd @a
+    FI    
+}
+
+
+// This a comment
+// @FMAP AND @IGNORE are special VARIBS
+// each entry of @FMAP is [dir,cond,build,run,events]
+//  dir -> Place where cmnd exec
+//  cond -> Check & Run happen only if true if empty then no cond
+//  build -> Build cmnd
+//  run -> Run cmnd
+//  events -> R W O C D N T
+
+
+@FMAP{
+    ".ts" -> ["frontend/app","npm check","","npm run dev", "ORWD"]
+    ".rs" -> ["backend/src/user",@my_fn(@FILE),"cargo check","cargo run -- " + @ARGS, "OW"]
+    @rs_ext -> ["backend/src/admin",,"cargo build","cargo run -- " + @ARGS, "OR"]
+}
+
+@IGNORE{
+    @ign_file
+    ".vscode" 
+}
+

@@ -1,5 +1,5 @@
 pub mod Helper{
-    use std::process::exit;
+    use std::{path::PathBuf, process::exit};
 
 
 
@@ -10,7 +10,8 @@ pub mod Helper{
 
     #[derive(Debug,Clone)]
     pub struct CLI{
-        pub dbg: bool
+        pub dbg: bool,
+        pub root: PathBuf,
     }
 
 
@@ -22,17 +23,19 @@ pub mod Helper{
 
     impl CLI{
         pub fn new() -> Self{
-            Self {dbg: false  }
+            Self {dbg: false, root: std::env::current_dir().unwrap()}
         }
 
         pub fn Parse_Args(&mut self){
             let args: Vec<String> = std::env::args().skip(1).collect();
-           for i in &args{
+            for i in &args{
                 if i == "-d" || i == "--debug" || i == " --DEBUG" || i == "-D"{
                     self.dbg = true;
                 } else if i == "-h" || i == "--help" || i == " --HELP" || i == "-H"{
                     Help();
-                } else{
+                } else if i.starts_with("--root="){
+                    self.root = PathBuf::from(&i[i.find("=").unwrap()+1..]);
+                }else{
                     Help();
                 }
            } 
