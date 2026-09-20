@@ -24,14 +24,14 @@ FUNC my_fn(a){
 //  build -> Build cmnd
 //  run -> Run cmnd
 //  clean -> Runs clean command before building
-//  events -> R W O C D N T
+//  events -> Cr De Mo Mv Op Cw Ac At Al
 //  monitor_dir -> The dir for it to monitor
 
 
 @FMAP{
-    ".ts" -> ["frontend/app",,"npm check","npm run dev",,"ORWD",'']
-    ".rs" -> ["backend/src/user",@my_fn(@FILE),"cargo check","cargo run -- " + @ARGS,cargo clean,"OW",'']
-    @rs_ext -> ["backend/src/admin",,"cargo build","cargo run -- @ARGS" ,,"OR",'']
+    ".ts" -> ["frontend/app",,"npm check","npm run dev",,"",'']
+    ".rs" -> ["backend/src/user",@my_fn(@FILE),"cargo check","cargo run -- " + @ARGS,cargo clean,"",'']
+    @rs_ext -> ["backend/src/admin",,"cargo build","cargo run -- @ARGS" ,,"",'']
 }
 
 @IGNORE{

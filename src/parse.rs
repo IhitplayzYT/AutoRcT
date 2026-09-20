@@ -1,20 +1,29 @@
 pub mod Parse{
     use std::{collections::{HashMap, HashSet}, fmt::Display, num::NonZero, process::{Command, ExitStatus}};
     use regex::Regex;
+use serde::{Deserialize, Serialize};
 
+    #[derive(Debug,Serialize,Deserialize)]
     pub struct Properties{
-        pub build: Option<String>,
-        pub run: Option<String>,
-        pub clean: Option<String>,
-        pub path: Option<String>,
+        pub build: Option<Exec>,
+        pub run: Option<Exec>,
+        pub clean: Option<Exec>,
+        pub path: Option<Exec>,
         pub monitor_dir: String,
-        pub events: u8,
-        pub cond: Option<String>
+        pub events: u16,
+        pub cond: Option<Exec>,
+        pub stack: Vec<HashMap<String,(String,Option<String>)>>
     }
+
+    #[derive(Debug,Serialize,Deserialize)]
+    pub enum Exec{
+        Cmd(String),
+        Fn(String,HashMap<String,String>)
+    } 
 
     impl Default for Properties{
         fn default() -> Self {
-            Self { build: None, run: None, clean: None, path: None,events: u8::MAX, monitor_dir:".".to_string(),cond:None}
+            Self { build: None, run: None, clean: None, path: None,events:((u8::MAX as u16) << 1) | 1 , monitor_dir:".".to_string(),cond:None,stack:vec![]}
         }
     }
 
@@ -68,7 +77,6 @@ pub mod Parse{
         let lines = file.lines().peekable();
         let mut scope = 0_usize;
 
-
         // LOADS global variables at start
         for i in lines{
             if i.contains("{"){
@@ -101,8 +109,9 @@ pub mod Parse{
             }
         }
 
+        // Reset stack
         varibs.clear();
-        varibs.push(HashMap::new()); // Reset stack
+        varibs.push(HashMap::new());
 
         // Loads fxns
         for cap in re.captures_iter(&file) {
@@ -123,9 +132,8 @@ pub mod Parse{
                 if !tr.is_empty(){
                     conf.ignore_files.insert(tr.to_string());
                 }
-            });
-        
-        file.drain(sec_st..sec_st+st+ed);
+            });        
+            file.drain(sec_st..sec_st+st+ed);
         }
 
 
@@ -141,30 +149,115 @@ pub mod Parse{
 
             // We need the inspect route 
             assert!(!param_is_empty(v_prop[0]));
+            prop.stack =  varibs.clone();
 
+
+            // COND
             if !v_prop[1].is_empty(){
-                prop.cond = Some(v_prop[1].to_string());
+                if v_prop[1].starts_with("@") {
+                    let st = v_prop[1].find("(").unwrap();
+                    let ed = v_prop[1].find(")").unwrap();
+                    let mut brk = false;
+                    for layer in varibs.iter(){
+                        for (k,(fn_body,p_l)) in layer{
+                            if let Some(p_sig) = p_l{  
+                                let p_map: HashMap<String,String> = p_sig.split(",").map(| x| str::trim(x).to_string()).zip(v_prop[1][st+1..ed].split(",").map(|x| str::trim(x).to_string())).collect();
+                                prop.cond = Some(Exec::Fn(fn_body.to_string(), p_map));
+                                brk = true;
+                                break;
+                            }
+                            if brk{
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    prop.cond = Some(Exec::Cmd(v_prop[1].to_string()))
+                }
             }
             
+            // BUILD
             if !v_prop[2].is_empty(){
-                prop.build = Some(v_prop[1].to_string());
+                if v_prop[2].starts_with("@") {
+                    let st = v_prop[2].find("(").unwrap();
+                    let ed = v_prop[2].find(")").unwrap();
+                    let mut brk = false;
+                    for layer in varibs.iter(){
+                        for (k,(fn_body,p_l)) in layer{
+                            if let Some(p_sig) = p_l{  
+                                let p_map: HashMap<String,String> = p_sig.split(",").map(| x| str::trim(x).to_string()).zip(v_prop[1][st+1..ed].split(",").map(|x| str::trim(x).to_string())).collect();
+                                prop.build = Some(Exec::Fn(fn_body.to_string(), p_map));
+                                brk = true;
+                                break;
+                            }
+                            if brk{
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    prop.build = Some(Exec::Cmd(v_prop[2].to_string()))
+                }
             }
 
+            // RUN
             if !v_prop[3].is_empty(){
-                prop.run = Some(v_prop[1].to_string());
+                if v_prop[3].starts_with("@") {
+                    let st = v_prop[3].find("(").unwrap();
+                    let ed = v_prop[3].find(")").unwrap();
+                    let mut brk = false;
+                    for layer in varibs.iter(){
+                        for (k,(fn_body,p_l)) in layer{
+                            if let Some(p_sig) = p_l{  
+                                let p_map: HashMap<String,String> = p_sig.split(",").map(| x| str::trim(x).to_string()).zip(v_prop[1][st+1..ed].split(",").map(|x| str::trim(x).to_string())).collect();
+                                prop.run = Some(Exec::Fn(fn_body.to_string(), p_map));
+                                brk = true;
+                                break;
+                            }
+                            if brk{
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    prop.run = Some(Exec::Cmd(v_prop[3].to_string()))
+                }
             }
 
+            // CLEAN
             if !v_prop[4].is_empty(){
-                prop.clean = Some(v_prop[1].to_string());
+                if v_prop[4].starts_with("@") {
+                    let st = v_prop[4].find("(").unwrap();
+                    let ed = v_prop[4].find(")").unwrap();
+                    let mut brk = false;
+                    for layer in varibs.iter(){
+                        for (k,(fn_body,p_l)) in layer{
+                            if let Some(p_sig) = p_l{  
+                                let p_map: HashMap<String,String> = p_sig.split(",").map(| x| str::trim(x).to_string()).zip(v_prop[1][st+1..ed].split(",").map(|x| str::trim(x).to_string())).collect();
+                                prop.clean = Some(Exec::Fn(fn_body.to_string(), p_map));
+                                brk = true;
+                                break;
+                            }
+                            if brk{
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    prop.clean = Some(Exec::Cmd(v_prop[4].to_string()))
+                }
             }
 
+            // EVENTS
             if !v_prop[5].is_empty(){
                 prop.events = parse_event(v_prop[5]);
             }
 
+            // MONITOR_DIR
             if !v_prop[6].is_empty(){
                 prop.monitor_dir = v_prop[6].to_string();
             }
+
             conf.exec_props.insert((ext,v_prop[0].to_string()), prop);
         });
         
@@ -176,18 +269,30 @@ pub mod Parse{
         (a == "\"\"") || a == "\'\'" || a.is_empty()
     }
 
-    fn parse_event(s: &str) -> u8{
+    fn parse_event(s: &str) -> u16{
         let mut ret = 0;
-        let s = s.to_lowercase().chars().collect::<HashSet<char>>();
-        for (i,ch) in "rwocdnt".chars().enumerate(){
-            if s.contains(&ch){
-                ret |= 1 << i;
-            }
+        let s = s.to_lowercase();
+        for cd in s.as_bytes().chunks(2){
+            let code = std::str::from_utf8(cd).unwrap();
+            //  events -> Cr De Mo Mv Op Cw Ac At Al
+            match code {
+                "cr" => {ret |= 1 << 0},
+                "de" => {ret |= 1 << 1},
+                "mo" => {ret |= 1 << 2},
+                "mv" => {ret |= 1 << 3},
+                "op" => {ret |= 1 << 4},
+                "cw" => {ret |= 1 << 5},
+                "ac" => {ret |= 1 << 6},
+                "at" => {ret |= 1 << 7},
+                _ => {ret |= u8::MAX as u16},
+            }    
         }
         ret
     }
 
 
+
+    #[derive(Debug,PartialEq,PartialOrd)]
     pub enum t_Return{
         Bool(bool),
         Int(isize),
@@ -229,7 +334,9 @@ pub mod Parse{
 
     pub fn exec_fxn(params: HashMap<&str,&str>,mut body: &str,stack: &mut Vec<HashMap<String,(String,Option<String>)>>) -> t_Return{
         stack.push(HashMap::new());
-        let mut body = body.to_string();
+        
+        let mut n_body = "".to_string();
+
         // First Eval varibs and nexted fxn_calls
         let re = Regex::new(r"(?s)FUNC\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{(.*?)\}").unwrap();
         for line in body.lines().map(|x| x.trim()){
@@ -258,9 +365,14 @@ pub mod Parse{
                     }
                 }
                 stack.last_mut().unwrap().insert(k.to_string(), (v,None));
+            }else{
+                n_body.push_str(line);
+                n_body.push_str("\n");
             }
         }
-        
+
+        let mut body = n_body;
+
         for layer in stack.iter(){
             for (k,(v,p_l)) in layer{
                 if p_l.is_none(){
@@ -273,68 +385,85 @@ pub mod Parse{
                         let l = k.len()+1;
                         let p_params = &body[st+l+1..st+ed];
                         let p_l = &p_l.clone().unwrap_or_default()[..];
-
                         let p_map: HashMap<&str,&str> = p_l.split(",").map(|x| x.trim()).zip(p_params.split(",").map(|x| x.trim())).collect();
                         let mut st_cl = stack.clone();
                         body = body.replace(&body[st..st+ed],&format!("{}",exec_fxn(p_map, &body, &mut st_cl)));
                     }
-
                 }                
             }
         }
 
+        let lines: Vec<&str> = body.lines().map(str::trim).filter(|x| !x.is_empty()).collect();
 
+        if lines.is_empty() {
+            return t_Return::Null;
+        }
+    
+        let mut case_body = vec![];
+        let mut get_body = false;
+        let mut exit_ladder = false;
 
-        for line in body.lines().map(|x| x.trim()){
+        for line in lines{
+            if exit_ladder{
+                if line.starts_with("FI"){
+                    get_body = false;
+                    exit_ladder = false;
+                    if let Some(ret) = eval_branch(&case_body){
+                        return ret; 
+                    }
+                }else{
+                    continue;
+                }
+            }
+
+            if get_body{
+                if line.starts_with("ELIF") || line.starts_with("ELSE") || line.starts_with("FI"){
+                    get_body = false;                    
+                    exit_ladder = true;
+                }else{
+                    case_body.push(line);
+                }
+                continue
+            }
+
             if line.starts_with("IF") || line.starts_with("ELIF"){
+                let cond = eval_cond(&line[line.find(" ").unwrap()+1..]);
+                if cond{
+                    get_body = true;
+                    exit_ladder = false;
+                    case_body.clear();
+                }
+            }
+
+            if line.starts_with("RETURN"){
+                return eval_half(&line[line.find(" ").unwrap()+1..]);
             }
         }
 
-
-
         t_Return::Null
+    }
+
+    fn eval_branch(lines: &Vec<&str>) -> Option<t_Return>{ 
+        for line in lines{
+            if line.starts_with("RETURN"){
+                let ret_str = &line[line.find(" ").unwrap()+1..];
+                if ret_str.starts_with("CMD"){
+                    let out = Command::new(&line[4..]).output().expect("Stuck and Terminated");
+                    return Some(t_Return::Str(if out.status.success(){String::from_utf8(out.stdout).unwrap()} else{String::from_utf8(out.stderr).unwrap()}));
+                }
+                return Some(eval_half(ret_str));
+            } else if line.starts_with("CMD") {
+                let _ = Command::new(&line[4..]).output().expect("Stuck and Terminated");
+            }
+        }
+        None
     }
 
 
     fn eval_half(half: &str) -> t_Return{
         let half = half.trim();
-        
-
-
-    }
-
-    //  "s1" == "s2"
-    fn eval_cond(cond: &str) -> bool{
-
-
-
-        let cond = cond.trim();
-        if let Some((lhs,rhs)) = cond.split_once("=="){
-            return eval_cond(lhs) == eval_cond(rhs);
-        }
-
-        if let Some((lhs,rhs)) = cond.split_once("!="){
-            return eval_cond(lhs) != eval_cond(rhs);
-        }
-
-        if let Some((lhs,rhs)) = cond.split_once(">"){
-            return eval_cond(lhs) > eval_cond(rhs);
-        }
-
-        if let Some((lhs,rhs)) = cond.split_once("<"){
-            return eval_cond(lhs) < eval_cond(rhs);
-        }
-
-        if let Some((lhs,rhs)) = cond.split_once("<="){
-            return eval_cond(lhs) <= eval_cond(rhs);
-        }
-
-        if let Some((lhs,rhs)) = cond.split_once(">="){
-            return eval_cond(lhs) >= eval_cond(rhs);
-        }
         let mut c = 0;
-
-        if cond.bytes().all(|x| {
+        if half.bytes().all(|x| {
             if x >= b'0'  && x <= b'9'{
                 true
             }else{
@@ -347,44 +476,55 @@ pub mod Parse{
             }
         }){
             if c == 1{
-                let num = cond.parse::<f64>().expect("NOT POSSIBLE");
-                if num > 0.0{
-                    return true
-                }else{
-                    return false
-                }
+                return t_Return::Float(half.parse::<f64>().expect("NOT POSSIBLE"));
             }else{
-                let num = cond.parse::<isize>().expect("NOT POSSIBLE");
-                if num > 0{
-                    return true
-                }else{
-                    return false
-                }
+                return t_Return::Int(half.parse::<isize>().expect("NOT POSSIBLE"));
             }
         } else{
-            let ret = match cond{
+            let ret = match half{
                 "true" => Some(true),
                 "false" => Some(false),
                 _ => None
             };
             
             if let Some(z) = ret{
-                return z;
+                return t_Return::Bool(z);
             }else{
-                if matches!(cond,"\"\""|"\'\'"|""){
-                    return false
+                if matches!(half,"\"\""|"\'\'"|""){
+                    return t_Return::Null
                 }else{
-                    return true
-                }
-
-            
+                    return t_Return::Str(half.to_string())
+                }            
             }
+        }
+    }
 
+    fn eval_cond(cond: &str) -> bool{
+        let cond = cond.trim();
 
+        if let Some((lhs,rhs)) = cond.split_once("=="){
+            return eval_half(lhs) == eval_half(rhs);
         }
 
-        
-        
+        if let Some((lhs,rhs)) = cond.split_once("!="){
+            return eval_half(lhs) != eval_half(rhs);
+        }
+
+        if let Some((lhs,rhs)) = cond.split_once(">"){
+            return eval_half(lhs) > eval_half(rhs);
+        }
+
+        if let Some((lhs,rhs)) = cond.split_once("<"){
+            return eval_half(lhs) < eval_half(rhs);
+        }
+
+        if let Some((lhs,rhs)) = cond.split_once("<="){
+            return eval_half(lhs) <= eval_half(rhs);
+        }
+
+        if let Some((lhs,rhs)) = cond.split_once(">="){
+            return eval_half(lhs) >= eval_half(rhs);
+        }
 
         false
     }

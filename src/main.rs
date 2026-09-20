@@ -1,7 +1,10 @@
 use crate::{helper::Helper::CLI, parse::Parse::parse_conf};
 
+
+
 mod helper;
 mod parse;
+mod daemon;
 
 fn main() {
     let mut clargs = CLI::new();
@@ -17,6 +20,13 @@ fn main() {
 
     let fl = std::fs::read_to_string(conf_p).unwrap();
     let conf = parse_conf(&fl);
+    
+
+
+
+
+
+
 
     
 
