@@ -10,24 +10,28 @@ FUNC my_fn(a){
         CMD echo "Echo of param failed"
     ELSE
         CMD cd @a
-    FI    
+    FI 
+
+    RETURN (TRUE)
 }
 
 
 // This a comment
 // @FMAP AND @IGNORE are special VARIBS
-// each entry of @FMAP is [dir,cond,build,run,events]
+// each entry of @FMAP is [dir,cond,build,run,clean,events,monitor_dir]
 //  dir -> Place where cmnd exec
 //  cond -> Check & Run happen only if true if empty then no cond
 //  build -> Build cmnd
 //  run -> Run cmnd
+//  clean -> Runs clean command before building
 //  events -> R W O C D N T
+//  monitor_dir -> The dir for it to monitor
 
 
 @FMAP{
-    ".ts" -> ["frontend/app","npm check","","npm run dev", "ORWD"]
-    ".rs" -> ["backend/src/user",@my_fn(@FILE),"cargo check","cargo run -- " + @ARGS, "OW"]
-    @rs_ext -> ["backend/src/admin",,"cargo build","cargo run -- " + @ARGS, "OR"]
+    ".ts" -> ["frontend/app",,"npm check","npm run dev",,"ORWD",'']
+    ".rs" -> ["backend/src/user",@my_fn(@FILE),"cargo check","cargo run -- " + @ARGS,cargo clean,"OW",'']
+    @rs_ext -> ["backend/src/admin",,"cargo build","cargo run -- @ARGS" ,,"OR",'']
 }
 
 @IGNORE{
