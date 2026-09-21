@@ -1,29 +1,47 @@
 pub mod daemon{
     use std::collections::{HashMap, HashSet};
-    use std::path::PathBuf;
+    use std::panic::panic_any;
+use std::path::PathBuf;
     use std::path::Path; 
     use std::thread;
     use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
+
+use crate::parse::Parse::{Config, Properties};
 
     pub struct InotifyMonitor {
         inotify: Inotify,
         watches: HashMap<WatchDescriptor, PathBuf>,
         ignored_files: HashSet<PathBuf>,
         ignored_dirs: HashSet<PathBuf>,
+        conf:HashMap<(String,String), Properties>,
+        ftree: NTree<String>,
     }
 
     impl InotifyMonitor {
 
-        pub fn new() -> std::io::Result<Self> {
-            Ok(Self {inotify: Inotify::init()?,watches: HashMap::new(),ignored_files: HashSet::new(),ignored_dirs: HashSet::new()})
+        pub fn new(conf : Config) -> std::io::Result<Self> {
+            let mut ret = Self{inotify: Inotify::init()?,watches: HashMap::new(),ignored_files: HashSet::new(),ignored_dirs: HashSet::new(),conf:conf.exec_props};
+            let ignores = conf.ignore_files;
+            ignores.iter().for_each(|x| {
+                let pth = PathBuf::from(x);
+                if pth.exists(){
+                    if pth.is_dir(){
+                        ret.ignored_dirs.insert(pth);
+                    }else{
+                        ret.ignored_files.insert(pth);
+                    }
+                }
+            });
+
+            Ok(ret)
         }
 
-        pub fn ignore_file<P: AsRef<Path>>(&mut self, path: P) {
-            self.ignored_files.insert(path.as_ref().to_path_buf());
+        pub fn ignore_file(&mut self, path: &Path) {
+            self.ignored_files.insert(path.to_path_buf());
         }
 
-        pub fn ignore_dir<P: AsRef<Path>>(&mut self, path: P) {
-            self.ignored_dirs.insert(path.as_ref().to_path_buf());
+        pub fn ignore_dir(&mut self, path: &Path) {
+            self.ignored_dirs.insert(path.to_path_buf());
         }
 
         fn is_ignored_dir(&self, path: &Path) -> bool {
@@ -34,8 +52,7 @@ pub mod daemon{
             self.ignored_files.contains(path)
         }
 
-        pub fn watch_dir<P: AsRef<Path>>(&mut self,dir: P,mask: WatchMask) -> std::io::Result<()> {
-            let dir = dir.as_ref();
+        pub fn watch_dir(&mut self,dir: &Path,mask: WatchMask) -> std::io::Result<()> {
             if self.is_ignored_dir(dir) {
                 return Ok(());
             }
@@ -66,15 +83,11 @@ pub mod daemon{
                             Some(name) => base.join(name),
                             None => base.clone(),
                         };
+                        println!("{base:?} {path:?}");
 
-                        if self.is_ignored_file(&path) {
+                        if self.is_ignored_file(&path) ||self.is_ignored_dir(&path) {
                             continue;
                         }
-
-                        if self.is_ignored_dir(&path) {
-                            continue;
-                        }
-
                         self.handle_event(&path,event.mask);
                     }
                 }
