@@ -6,6 +6,7 @@ use std::path::PathBuf;
     use std::thread;
     use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
 
+use crate::fpath::Fpath::NTree;
 use crate::parse::Parse::{Config, Properties};
 
     pub struct InotifyMonitor {
@@ -14,13 +15,14 @@ use crate::parse::Parse::{Config, Properties};
         ignored_files: HashSet<PathBuf>,
         ignored_dirs: HashSet<PathBuf>,
         conf:HashMap<(String,String), Properties>,
-        ftree: NTree<String>,
+        ftree: NTree,
     }
 
     impl InotifyMonitor {
 
-        pub fn new(conf : Config) -> std::io::Result<Self> {
-            let mut ret = Self{inotify: Inotify::init()?,watches: HashMap::new(),ignored_files: HashSet::new(),ignored_dirs: HashSet::new(),conf:conf.exec_props};
+        pub fn new(conf: Config,fpath_pfx: Option<String>) -> std::io::Result<Self> {
+            
+            let mut ret = Self{inotify: Inotify::init()?,watches: HashMap::new(),ignored_files: HashSet::new(),ignored_dirs: HashSet::new(),conf:conf.exec_props,ftree:NTree::new(fpath_pfx)};
             let ignores = conf.ignore_files;
             ignores.iter().for_each(|x| {
                 let pth = PathBuf::from(x);
@@ -33,6 +35,7 @@ use crate::parse::Parse::{Config, Properties};
                 }
             });
 
+            
             Ok(ret)
         }
 

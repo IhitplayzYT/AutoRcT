@@ -28,7 +28,8 @@ fn main() -> Result<(),Box<dyn Error>>{
 
     conf.exec_props.insert((".rs".to_string(),"~/AutoRcT/src".to_string()),prop);
 
-    let orchestrator = InotifyMonitor::new(conf)?;
+    let orchestrator = InotifyMonitor::new(conf,None)?;
+    
     let hndle = orchestrator.run();
     loop{
         thread::sleep(Duration::from_secs(1));    
